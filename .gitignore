@@ -1,24 +1,112 @@
-# Compiled class file
-*.class
 
-# Log file
-*.log
+package com.mycompany.parqueatracciones;
+import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.TimeUnit;
 
-# BlueJ files
-*.ctxt
+class Atraccion {
+    private final String nombre;
+    private final int capacidadMaxima;
+    private final ReentrantLock lock = new ReentrantLock();
+    private int visitantesActuales = 0;
 
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
+    public Atraccion(String nombre, int capacidadMaxima) {
+        this.nombre = nombre;
+        this.capacidadMaxima = capacidadMaxima;
+    }
 
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
+    public boolean intentarSubir(String nombreVisitante) {
+        boolean accesoConcedido = false;
+        try {
+            if (lock.tryLock(500, TimeUnit.MILLISECONDS)) {
+                try {
+                    if (visitantesActuales < capacidadMaxima) {
+                        visitantesActuales++;
+                        System.out.println(nombreVisitante + " ha subido a " + nombre + " (Visitantes: " + visitantesActuales + ")");
+                        accesoConcedido = true;
+                    }
+                } finally {
+                    lock.unlock();
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return accesoConcedido;
+    }
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+    public void bajar(String nombreVisitante) {
+        lock.lock();
+        try {
+            visitantesActuales--;
+            System.out.println(nombreVisitante + " ha bajado de " + nombre + " (Visitantes: " + visitantesActuales + ")");
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public String getNombre() {
+        return nombre;
+    }
+}
+
+class Visitante extends Thread {
+    private final String nombre;
+    private final List<Atraccion> atracciones;
+    private final Random random = new Random();
+
+    public Visitante(String nombre, List<Atraccion> atracciones) {
+        this.nombre = nombre;
+        this.atracciones = atracciones;
+    }
+
+    @Override
+    public void run() {
+        for (int intentos = 0; intentos < 5; intentos++) {
+            Atraccion atraccion = atracciones.get(random.nextInt(atracciones.size()));
+            if (atraccion.intentarSubir(nombre)) {
+                try {
+                    Thread.sleep(1000 + random.nextInt(2000)); // simulando tiempo en la atracción
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    atraccion.bajar(nombre);
+                }
+                break;
+            } else {
+                System.out.println(nombre + " no pudo subir a " + atraccion.getNombre() + ", reintentará...");
+                try {
+                    Thread.sleep(300 + random.nextInt(500)); // espera antes de intentar otra vez
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+}
+
+public class ParqueAtracciones {
+    public static void main(String[] args) {
+        List<Atraccion> atracciones = new ArrayList<>();
+        atracciones.add(new Atraccion("Montaña Rusa", 3));
+        atracciones.add(new Atraccion("Noria", 2));
+        atracciones.add(new Atraccion("Carrusel", 4));
+
+        List<Visitante> visitantes = new ArrayList<>();
+        for (int i = 1; i <= 10; i++) {
+            visitantes.add(new Visitante("Visitante-" + i, atracciones));
+        }
+
+        visitantes.forEach(Thread::start);
+
+        for (Thread t : visitantes) {
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        System.out.println("Simulación terminada.");
+    }
+}
